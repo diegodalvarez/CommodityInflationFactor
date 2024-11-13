@@ -32,6 +32,10 @@ class InflationDataManager:
         self.df_fut_tickers = (pd.read_excel(
             io = self.bbg_fut_path, sheet_name = "px"))
         
+        self.bad_breakevens = [
+            "USGGBE01 Index", "USGGBE09 Index", "USGGBE06 Index", 
+            "USGGBE08 Index", "USGGBE03 Index"]
+        
     def _get_rtn(self, df: pd.DataFrame) -> pd.DataFrame:
         
         return(df.sort_values(
@@ -116,7 +120,7 @@ class InflationDataManager:
         
         return df_out
     
-    def get_breakeven_swap(self, verbose: bool = False) -> pd.DataFrame: 
+    def get_breakeven(self, verbose: bool = False) -> pd.DataFrame: 
         
         file_path = os.path.join(self.raw_data_path, "BreakevenRates.parquet")
         try:
@@ -151,7 +155,8 @@ class InflationDataManager:
             df_out = (pd.read_parquet(
                 path = files, engine = "pyarrow").
                 drop(columns = ["variable"]).
-                merge(right = df_tickers, how = "inner", on = ["security"]))
+                merge(right = df_tickers, how = "inner", on = ["security"]).
+                query("security != @self.bad_breakevens"))
             
             if verbose == True: print("Saving data\n")
             df_out.to_parquet(path = file_path, engine = "pyarrow")
@@ -161,7 +166,7 @@ class InflationDataManager:
 def main() -> None:
         
     InflationDataManager().get_inflation_swap(verbose = True)
-    InflationDataManager().get_breakeven_swap(verbose = True)
+    InflationDataManager().get_breakeven(verbose = True)
     InflationDataManager().get_commodity_futures(verbose = True)
     
-if __name__ == "__main__": main()
+#if __name__ == "__main__": main()

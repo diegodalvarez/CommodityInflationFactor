@@ -22,6 +22,12 @@ class FactorModel(DataPrepocess):
         
         if os.path.exists(self.factor_path) == False: os.makedirs(self.factor_path)
         
+    def _get_month_end(self, df: pd.DataFrame) -> pd.DataFrame: 
+        
+        return(df.query(
+            "date == date.min()").
+            sort_values("date"))
+        
     def _get_decile(self, df: pd.DataFrame, d: int) -> pd.DataFrame: 
             
         df_out = (df.assign(
@@ -135,9 +141,78 @@ class FactorModel(DataPrepocess):
         
         return df_factor
     
+    def generate_monthly_factor(self) -> pd.DataFrame:
+        
+        file_path = os.path.join(self.factor_path, "IndividualSecMonthRtn.parquet")
+        try:
+            
+            df_monthly = pd.read_parquet(path = file_path, engine = "pyarrow")
+            
+        except: 
+            
+            df_month_end = (self.generate_factor().assign(
+                cur_month = lambda x: pd.to_datetime(x.date).dt.strftime("%Y-%m")).
+                groupby(["cur_month", "group_var"]).
+                apply(self._get_month_end).
+                reset_index(drop = True))
+            
+            df_month = (df_month_end[
+                ["cur_month"]].
+                drop_duplicates().
+                sort_values("cur_month").
+                assign(target_month = lambda x: x.cur_month.shift(-1)))
+            
+            df_weighting = (df_month_end[
+                ["security", "weight", "cur_month", "group_var", "lag_decile"]].
+                merge(right = df_month, how = "inner", on = ["cur_month"]).
+                dropna())
+            
+            df_monthly = (self.get_commodity_futures().assign(
+                target_month = lambda x: pd.to_datetime(x.date).dt.strftime("%Y-%m")).
+                merge(right = df_weighting, how = "inner", on = ["security", "target_month"]).
+                assign(factor_rtn = lambda x: x.weight * x.PX_rtn))
+            
+            df_monthly.to_parquet(path = file_path, engine = "pyarrow")
+        
+        return df_monthly
+    
+    def generate_monthly_factor_rtn(self) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.factor_path, "InflationMonthlyReturns.parquet")
+        try:
+            
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            
+        except: 
+        
+            df_factor_rtn = self.generate_monthly_factor()
+            df_out = (df_factor_rtn[
+                ["date", "group_var", "lag_decile", "factor_rtn"]].
+                assign(lag_decile = lambda x: x.lag_decile.astype(str)).
+                groupby(["date", "group_var", "lag_decile"]).
+                agg("sum").
+                reset_index().
+                pivot(
+                    index   = ["date", "group_var"], 
+                    columns = "lag_decile", 
+                    values  = "factor_rtn").
+                fillna(0).
+                reset_index().
+                assign(spread = lambda x: x.D5 - x.D1).
+                drop(columns = ["D1", "D5"]).
+                assign(
+                    inflation_group = lambda x: x.group_var.str.split(" ").str[0],
+                    pc              = lambda x: x.group_var.str.split(" ").str[-1]))
+            
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
+    
 def main():
     
     FactorModel().generate_factor()
     FactorModel().generate_factor_rtn()
+    FactorModel().generate_monthly_factor()
+    FactorModel().generate_monthly_factor_rtn()
     
 if __name__ == "__main__": main()

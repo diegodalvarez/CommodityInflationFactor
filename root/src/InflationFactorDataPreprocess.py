@@ -103,7 +103,7 @@ class DataPrepocess(InflationDataManager):
         
     def breakeven_rate_pca(self, verbose: bool = False) -> pd.DataFrame: 
         
-        df_wider = (self.get_breakeven_swap().assign(
+        df_wider = (self.get_breakeven().assign(
             security = lambda x: x.security.str.split(" ").str[0])
             [["date", "security", "value"]].
             pivot(index = "date", columns = "security", values = "value").
@@ -133,16 +133,6 @@ class DataPrepocess(InflationDataManager):
         
     def get_rolling_beta(self, verbose: bool = False) -> pd.DataFrame: 
         
-        df_combined = (pd.concat([
-            (pd.read_parquet(
-                path = os.path.join(self.pca_fitted_path, file), engine = "pyarrow").
-                assign(name = file.split(".")[0]))
-            for file in os.listdir(self.pca_fitted_path)]).
-            reset_index())
-        
-        return df_combined
-        
-        '''
         file_path = os.path.join(self.ols_path, "OLSParams.parquet")
         try:
             
@@ -171,14 +161,11 @@ class DataPrepocess(InflationDataManager):
             df_combined.to_parquet(path = file_path, engine = "pyarrow")
         
         return df_combined
-        '''
 
 def main():
 
-    DataPrepocess().get_rolling_beta(verbose = True)
     DataPrepocess().inflation_swap_pca(verbose = True)        
     DataPrepocess().breakeven_rate_pca(verbose = True)
+    DataPrepocess().get_rolling_beta(verbose = True)
     
 #if __name__ == "__main__": main()
-
-df = DataPrepocess().get_rolling_beta(verbose = True)
