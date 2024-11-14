@@ -48,7 +48,6 @@ The cumulative performance of each factor per each PC of each curve is
 The sharpes of each spread
 ![image](https://github.com/user-attachments/assets/1993ad54-1d96-4405-b2e8-4b63527a5185)
 
-
 ## Appendices
 Collection of Futures Contracts
 | Contract   | Description      | Start Date   | End Date   |
