@@ -23,11 +23,13 @@ class DataPrepocess(InflationDataManager):
         self.pca_loadings_path = os.path.join(self.data_path, "PCLoadings")
         self.pca_exp_var_path  = os.path.join(self.data_path, "PCExpVar")
         self.ols_path          = os.path.join(self.data_path, "OLSPath")
+        self.misc_data_path    = os.path.join(self.data_path, "MiscData")
         
         if os.path.exists(self.pca_fitted_path)   == False: os.makedirs(self.pca_fitted_path)
         if os.path.exists(self.pca_loadings_path) == False: os.makedirs(self.pca_loadings_path)
         if os.path.exists(self.pca_exp_var_path)  == False: os.makedirs(self.pca_exp_var_path)
         if os.path.exists(self.ols_path)          == False: os.makedirs(self.ols_path)
+        if os.path.exists(self.misc_data_path)    == False: os.makedirs(self.misc_data_path)
     
         self.num_comps = 3
         self.window    = 20
@@ -161,11 +163,43 @@ class DataPrepocess(InflationDataManager):
             df_combined.to_parquet(path = file_path, engine = "pyarrow")
         
         return df_combined
+    
+    def prep_inflation_data(self, window: int = 12 * 7, verbose: bool = False) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.misc_data_path, "CPI.parquet")
+        try:
+            
+            if verbose == True: print("Searching for CPI data")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+        
+        except: 
+        
+            if verbose == True: print("Couldn't find data, collecting it")
+            
+            df_out = (self.get_cpi().reset_index().rename(
+                columns = {
+                    "DATE"    : "date",
+                    "CPIAUCSL": "cpi_val"}).
+                sort_values("date").
+                assign(
+                    date      = lambda x: pd.to_datetime(x.date).dt.date,
+                    cpi_yoy   = lambda x: x.cpi_val.pct_change(periods = 12),
+                    roll_mean = lambda x: x.cpi_yoy.rolling(window = window).mean(),
+                    roll_std  = lambda x: x.cpi_yoy.rolling(window = window).std(),
+                    z_score   = lambda x: (x.cpi_yoy - x.roll_mean) / x.roll_std).
+                dropna())
+            
+            if verbose == True: print("Saving data")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+        
+        return df_out
 
 def main():
 
     DataPrepocess().inflation_swap_pca(verbose = True)        
     DataPrepocess().breakeven_rate_pca(verbose = True)
     DataPrepocess().get_rolling_beta(verbose = True)
+    DataPrepocess().prep_inflation_data(verbose = True)
     
 #if __name__ == "__main__": main()
