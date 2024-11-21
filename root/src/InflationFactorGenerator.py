@@ -208,11 +208,94 @@ class FactorModel(DataPrepocess):
             
         return df_out
     
+    def _get_roll_vol(self, df: pd.DataFrame, vol_window: int) -> pd.DataFrame: 
+        
+        df_out = (df.sort_values(
+            "date").
+            assign(
+                roll_vol = lambda x: x.factor_rtn.rolling(window = vol_window).std(),
+                lag_vol  = lambda x: x.roll_vol.shift()).
+            dropna())
+        
+        return df_out
+    
+    def equal_risk_opt(self, vol_window: int = 30, verbose: bool = False) -> pd.DataFrame:
+        
+        file_path = os.path.join(self.factor_path, "IndividualSecMonthRtnERC.paurqet")
+        try:
+            
+            if verbose == True: print("Trying to find Monthly Factor Return ERC")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+            
+        except: 
+        
+            if verbose == True: print("Couldn't find data now collecting it")    
+        
+            df_factor = (self.generate_monthly_factor().assign(
+                lag_decile = lambda x: x.lag_decile.astype(str))
+                [["date", "group_var", "lag_decile", "factor_rtn"]].
+                groupby(["date", "group_var", "lag_decile"]).
+                agg("sum").
+                reset_index().
+                groupby(["group_var", "lag_decile"]).
+                apply(self._get_roll_vol, vol_window).
+                reset_index(drop = True).
+                assign(inv_vol = lambda x: 1 / x.lag_vol))
+        
+            df_cum_inv_vol = (df_factor[
+                ["date", "group_var", "inv_vol"]].
+                groupby(["date", "group_var"]).
+                agg("sum").
+                rename(columns = {"inv_vol": "cum_inv_vol"}).
+                reset_index())
+            
+            df_out = (df_factor.merge(
+                right = df_cum_inv_vol, how = "inner", on = ["date", "group_var"]).
+                assign(weight = lambda x: x.inv_vol / x.cum_inv_vol)
+                [["date", "group_var", "lag_decile", "factor_rtn", "weight"]].
+                assign(weighted_factor_rtn = lambda x: x.factor_rtn * x.weight))
+            
+            if verbose == True: print("Saving data")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
+    
+    def factor_equal_risk_opt(self, verbose: bool = False) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.factor_path, "InflationMonthlyERCReturns.paurqet")
+        try:
+            
+            if verbose == True: print("Trying to find Monthly Factor Return ERC")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+            
+        except: 
+        
+            if verbose == True: print("Couldn't find data now collecting it")    
+        
+            df_out = (self.equal_risk_opt()[
+                ["date", "group_var", "weighted_factor_rtn", "lag_decile"]].
+                pivot(
+                    index   = ["date", "group_var"], 
+                    columns = "lag_decile", 
+                    values  = "weighted_factor_rtn").
+                dropna().
+                reset_index().
+                assign(spread = lambda x: x.D5 - x.D1))
+            
+            if verbose == True: print("Saving data\n")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
+    
 def main():
     
-    FactorModel().generate_factor()
-    FactorModel().generate_factor_rtn()
-    FactorModel().generate_monthly_factor()
-    FactorModel().generate_monthly_factor_rtn()
+    FactorModel().generate_factor(verbose = True)
+    FactorModel().generate_factor_rtn(verbose = True)
+    FactorModel().generate_monthly_factor(verbose = True)
+    FactorModel().generate_monthly_factor_rtn(verbose = True)
+    FactorModel().equal_risk_opt(verbose = True)
+    FactorModel().factor_equal_risk_opt(verbose = True)
     
-if __name__ == "__main__": main()
+#if __name__ == "__main__": main()
