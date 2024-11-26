@@ -298,7 +298,7 @@ class FactorModel(DataPrepocess):
         try:
             
             if verbose == True: print("Looking for forward inflation security returns")
-            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            df_weighting = pd.read_parquet(path = file_path, engine = "pyarrow")
             if verbose == True: print("Found data\n")
             
         except: 
@@ -341,16 +341,50 @@ class FactorModel(DataPrepocess):
         return df_weighting
 
     
-df = FactorModel().generate_forward_inflation_factor(verbose = True)
+    def generate_forward_inflation_monthly_factor(self) -> pd.DataFrame:
         
+        file_path = os.path.join(self.factor_path, "IndividualSecForwardMonthRtn.parquet")
+        try:
+            
+            df_monthly = pd.read_parquet(path = file_path, engine = "pyarrow")
+            
+        except: 
+            
+            df_month_end = (self.generate_forward_inflation_factor().assign(
+                cur_month = lambda x: pd.to_datetime(x.date).dt.strftime("%Y-%m")).
+                groupby(["cur_month", "group_var"]).
+                apply(self._get_month_end).
+                reset_index(drop = True))
+            
+            df_month = (df_month_end[
+                ["cur_month"]].
+                drop_duplicates().
+                sort_values("cur_month").
+                assign(target_month = lambda x: x.cur_month.shift(-1)))
+            
+            df_weighting = (df_month_end[
+                ["security", "weight", "cur_month", "group_var", "lag_decile"]].
+                merge(right = df_month, how = "inner", on = ["cur_month"]).
+                dropna())
+            
+            df_monthly = (self.get_commodity_futures().assign(
+                target_month = lambda x: pd.to_datetime(x.date).dt.strftime("%Y-%m")).
+                merge(right = df_weighting, how = "inner", on = ["security", "target_month"]).
+                assign(factor_rtn = lambda x: x.weight * x.PX_rtn))
+            
+            df_monthly.to_parquet(path = file_path, engine = "pyarrow")
+        
+        return df_monthly
     
 def main():
     
-    FactorModel().generate_factor(verbose = True)
-    FactorModel().generate_factor_rtn(verbose = True)
-    FactorModel().generate_monthly_factor(verbose = True)
-    FactorModel().generate_monthly_factor_rtn(verbose = True)
+    FactorModel().generate_factor()
+    FactorModel().generate_factor_rtn()
+    FactorModel().generate_monthly_factor()
+    FactorModel().generate_monthly_factor_rtn()
     FactorModel().equal_risk_opt(verbose = True)
     FactorModel().factor_equal_risk_opt(verbose = True)
+    FactorModel().generate_forward_inflation_factor()
+    FactorModel().generate_forward_inflation_monthly_factor()
     
-#if __name__ == "__main__": main()
+if __name__ == "__main__": main()
