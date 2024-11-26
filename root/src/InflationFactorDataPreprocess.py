@@ -24,12 +24,14 @@ class DataPrepocess(InflationDataManager):
         self.pca_exp_var_path  = os.path.join(self.data_path, "PCExpVar")
         self.ols_path          = os.path.join(self.data_path, "OLSPath")
         self.misc_data_path    = os.path.join(self.data_path, "MiscData")
+        self.five_year_forward = os.path.join(self.data_path, "FiveYearForward")
         
         if os.path.exists(self.pca_fitted_path)   == False: os.makedirs(self.pca_fitted_path)
         if os.path.exists(self.pca_loadings_path) == False: os.makedirs(self.pca_loadings_path)
         if os.path.exists(self.pca_exp_var_path)  == False: os.makedirs(self.pca_exp_var_path)
         if os.path.exists(self.ols_path)          == False: os.makedirs(self.ols_path)
         if os.path.exists(self.misc_data_path)    == False: os.makedirs(self.misc_data_path)
+        if os.path.exists(self.five_year_forward) == False: os.makedirs(self.five_year_forward)
     
         self.num_comps = 3
         self.window    = 20
@@ -194,6 +196,79 @@ class DataPrepocess(InflationDataManager):
             df_out.to_parquet(path = file_path, engine = "pyarrow")
         
         return df_out
+    
+    def prep_five_forward_inflation(
+            self, 
+            verbose: bool = False,
+            n_comps: int = 1) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.five_year_forward, "FiveYearForwardPrep.parquet")
+        try:
+            
+            if verbose == True: print("Trying to get 5y forward prep data")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found Data\n")
+            
+        except: 
+            
+            if verbose == True: print("Couldn't find data, collecting it")
+            df_tmp = (self.get_five_year_forward_inflation().assign(
+                security = lambda x: x.security.str.split(" ").str[0]).
+                pivot(index = "date", columns = "security", values = "value"))
+            
+            df_mean = (df_tmp.mean(
+                axis = 1).
+                to_frame(name = "mean_val"))
+            
+            df_na = df_tmp.dropna()
+            df_pc = (pd.DataFrame(
+                data    = PCA(n_components = n_comps).fit_transform(df_na),
+                columns = ["PC{}".format(i + 1) for i in range(n_comps)],
+                index   = df_na.index))
+            
+            df_out = (df_mean.merge(
+                right = df_pc, how = "outer", on = ["date"]).
+                reset_index().
+                melt(id_vars = "date").
+                dropna())
+            
+            if verbose == True: print("Saving data")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
+    
+    def get_five_forward_rolling_ols(
+            self,
+            verbose: bool = False) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.five_year_forward, "FiveYearForwardOLS.parquet")
+        try:
+            
+            if verbose == True: print("Trying to find 5y forward rolling OLS")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found Data\n")
+            
+        except:
+            
+            if verbose == True: print("Couldn't find data, collecting it")
+            df_commod = (self.get_commodity_futures().assign(
+                date = lambda x: pd.to_datetime(x.date).dt.date))
+            
+            df_out = (self.prep_five_forward_inflation().assign(
+                date = lambda x: pd.to_datetime(x.date).dt.date).
+                merge(right = df_commod, how = "inner", on = ["date"]).
+                drop(columns = ["PX_LAST"]).
+                assign(group_var = lambda x: x.variable + " " + x.security).
+                groupby("group_var").
+                apply(self._run_regression, self.window, verbose).
+                reset_index(drop = True))
+            
+            if verbose == True: print("Saving data\n")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
+    
+        
 
 def main():
 
@@ -201,5 +276,7 @@ def main():
     DataPrepocess().breakeven_rate_pca(verbose = True)
     DataPrepocess().get_rolling_beta(verbose = True)
     DataPrepocess().prep_inflation_data(verbose = True)
+    DataPrepocess().prep_five_forward_inflation(verbose = True)
+    DataPrepocess().get_five_forward_rolling_ols(verbose = True)
     
 #if __name__ == "__main__": main()

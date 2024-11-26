@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from   InflationFactorDataPreprocess import DataPrepocess
 
+import matplotlib.pyplot as plt
+
 class FactorModel(DataPrepocess):
     
     def __init__(self):
@@ -29,7 +31,7 @@ class FactorModel(DataPrepocess):
             sort_values("date"))
         
     def _get_decile(self, df: pd.DataFrame, d: int) -> pd.DataFrame: 
-            
+        
         df_out = (df.assign(
             decile = lambda x: pd.qcut(
                 x      = x.beta, 
@@ -288,6 +290,59 @@ class FactorModel(DataPrepocess):
             df_out.to_parquet(path = file_path, engine = "pyarrow")
             
         return df_out
+    
+    def generate_forward_inflation_factor(self, verbose: bool = False) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.factor_path, "ForwardInflationSecRtn.parquet")
+        
+        try:
+            
+            if verbose == True: print("Looking for forward inflation security returns")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+            
+        except: 
+            
+            if verbose == True: print("Couldn't find data, collecting it")
+        
+            df_prep = (self.get_five_forward_rolling_ols().drop(
+                columns = ["group_var"]).
+                rename(columns = {"variable": "group_var"}))
+            
+            dates = (df_prep[
+                ["date", "group_var"]].
+                groupby("date").
+                agg("count").
+                query("group_var > 10").
+                index.
+                to_list())
+            
+            df_decile = (df_prep.query(
+                "date == @dates").
+                groupby(["group_var", "date"]).
+                apply(self._get_decile, self.deciles).
+                reset_index(drop = True).
+                assign(tmp_var = lambda x: x.security + " " + x.group_var).
+                groupby("tmp_var").
+                apply(self._shift_decile).
+                reset_index(drop = True).
+                drop(columns = ["tmp_var", "decile"]).
+                query("lag_decile == @self.keep_deciles"))
+            
+            df_weighting = (df_decile.groupby([
+                "date", "group_var"]).
+                apply(self._get_weighting).
+                reset_index(drop = True).
+                assign(factor_rtn = lambda x: x.weight * x.PX_rtn))
+            
+            if verbose == True: print("Saving data\n")
+            df_weighting.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_weighting
+
+    
+df = FactorModel().generate_forward_inflation_factor(verbose = True)
+        
     
 def main():
     

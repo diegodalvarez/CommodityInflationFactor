@@ -20,22 +20,36 @@ class InflationDataManager:
         self.data_path      = os.path.join(self.root_path, "data")
         self.raw_data_path  = os.path.join(self.data_path, "RawData")
         
-        if os.path.exists(self.data_path) == False: os.makedirs(self.data_path)
+        if os.path.exists(self.data_path)     == False: os.makedirs(self.data_path)
         if os.path.exists(self.raw_data_path) == False: os.makedirs(self.raw_data_path)
-        
-        self.bbg_xlsx_path = r"C:\Users\Diego\Desktop\app_prod\BBGData\root\BBGTickers.xlsx"
-        self.bbg_data_path = r"C:\Users\Diego\Desktop\app_prod\BBGData\data"
-        self.df_tickers    = (pd.read_excel(
-            io = self.bbg_xlsx_path, sheet_name = "tickers"))
-        
-        self.bbg_fut_path   = r"C:\Users\Diego\Desktop\app_prod\BBGFuturesManager\root\fut_tickers.xlsx"
-        self.bbg_front_path = r"C:\Users\Diego\Desktop\app_prod\BBGFuturesManager\data\PXFront"
-        self.df_fut_tickers = (pd.read_excel(
-            io = self.bbg_fut_path, sheet_name = "px"))
         
         self.bad_breakevens = [
             "USGGBE01 Index", "USGGBE09 Index", "USGGBE06 Index", 
             "USGGBE08 Index", "USGGBE03 Index"]
+        
+        # for bbg data tickers
+        self.bbg_xlsx_path = r"C:\Users\Diego\Desktop\app_prod\BBGData\root\BBGTickers.xlsx"
+        if os.path.exists(self.bbg_xlsx_path) == False: 
+            self.bbg_xlsx_path = r"/Users/diegoalvarez/Desktop/BBGData/root/BBGTickers.xlsx"
+            
+        # for bbg data 
+        self.bbg_data_path = r"C:\Users\Diego\Desktop\app_prod\BBGData\data"
+        if os.path.exists(self.bbg_data_path) == False:
+            self.bbg_data_path = r"/Users/diegoalvarez/Desktop/BBGData/data"
+        
+        # for bbg futures tickers
+        self.bbg_fut_path = r"C:\Users\Diego\Desktop\app_prod\BBGFuturesManager\root\fut_tickers.xlsx"
+        if os.path.exists(self.bbg_fut_path) == False: 
+            self.bbg_fut_path = r"/Users/diegoalvarez/Desktop/BBGFuturesManager/root/fut_tickers.xlsx"
+            
+        # for bbg futures data
+        self.bbg_front_path = r"C:\Users\Diego\Desktop\app_prod\BBGFuturesManager\data\PXFront"
+        if os.path.exists(self.bbg_front_path) == False: 
+            self.bbg_front_path = r"/Users/diegoalvarez/Desktop/BBGFuturesManager/data/PXFront"
+            
+        self.df_tickers     = pd.read_excel(io = self.bbg_xlsx_path, sheet_name = "tickers")
+        self.df_fut_tickers = pd.read_excel(io = self.bbg_fut_path, sheet_name = "px")
+
         
     def _get_rtn(self, df: pd.DataFrame) -> pd.DataFrame:
         
@@ -230,7 +244,46 @@ class InflationDataManager:
             df_out.to_parquet(path = file_path, engine = "pyarrow")
             
         return df_out
-         
+    
+    def get_five_year_forward_inflation(self, verbose: bool = False) -> pd.DataFrame:
+        
+        file_path = os.path.join(self.raw_data_path, "FiveForwardInflation.parquet")
+        try:
+            
+            if verbose == True: print("Trying to find five year forward inflation data")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+            
+        except: 
+            
+            if verbose == True: print("Couldn't find data, collecting it")
+            tickers = (self.df_tickers.assign(
+                ending = lambda x: x.Description.str.split(" ").str[-1],
+                first  = lambda x: x.Security.str[0],
+                ticker = lambda x: x.Security.str.split(" ").str[0],
+                fifth  = lambda x: x.Security.str[4]).
+                query("ending == '5Y5Y'").
+                query("first == 'F'").
+                query("fifth != 'J'").
+                ticker.
+                drop_duplicates().
+                to_list())
+
+            paths = [
+                os.path.join(self.bbg_data_path, path + ".parquet")
+                for path in tickers]
+            
+            df_out = (pd.read_parquet(
+                path = paths, engine = "pyarrow").
+                assign(date = lambda x: pd.to_datetime(x.date).dt.date).
+                drop(columns = ["variable"]))
+            
+            if verbose == True: print("Saving data\n")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
+            
+            
 def main() -> None:
         
     InflationDataManager().get_inflation_swap(verbose = True)
@@ -238,5 +291,7 @@ def main() -> None:
     InflationDataManager().get_commodity_futures(verbose = True)
     InflationDataManager().get_cpi(verbose = True)
     InflationDataManager().get_misc_indices(verbose = True)
+    InflationDataManager().get_five_year_forward_inflation(verbose = True)
     
 #if __name__ == "__main__": main()
+
