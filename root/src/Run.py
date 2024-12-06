@@ -28,8 +28,8 @@ def main() -> None:
     # generating factor
     factor_model = FactorModel()
     factor_model.generate_factor()
-    factor_model.generate_factor_rtn(
+    factor_model.generate_factor_rtn()
     factor_model.generate_monthly_factor()
-    factor_model.generate_monthly_factor_rtn())
+    factor_model.generate_monthly_factor_rtn()
     
 if __name__ == "__main__": main()

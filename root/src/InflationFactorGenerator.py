@@ -376,6 +376,13 @@ class FactorModel(DataPrepocess):
         
         return df_monthly
     
+    def generate_forward_inflation_daily_equal_risk(self) -> pd.DataFrame: 
+        
+        '''
+        Start by getting the equal risk optimization everyday
+        '''
+        print(self.generate_forward_inflation_factor())
+    
 def main():
     
     FactorModel().generate_factor()
@@ -384,7 +391,8 @@ def main():
     FactorModel().generate_monthly_factor_rtn()
     FactorModel().equal_risk_opt(verbose = True)
     FactorModel().factor_equal_risk_opt(verbose = True)
+    
     FactorModel().generate_forward_inflation_factor()
     FactorModel().generate_forward_inflation_monthly_factor()
     
-if __name__ == "__main__": main()
+#if __name__ == "__main__": main()

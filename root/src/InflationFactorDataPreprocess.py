@@ -279,4 +279,4 @@ def main():
     DataPrepocess().prep_five_forward_inflation(verbose = True)
     DataPrepocess().get_five_forward_rolling_ols(verbose = True)
     
-#if __name__ == "__main__": main()
+if __name__ == "__main__": main()
