@@ -25,6 +25,10 @@ See at the bottom in appendices for specific futures contracts.
 All portfolios are dollar neutral. In theory $\beta$ inflation can be hedged by re-weighting the legs via their necessary $\beta$-hedge i.e. solving for this equation $w_{Q,long} \cdot \beta_{Q,long} - w_{short} \cdot \beta_{Q,short} = 0$ such that
 $|w_{Q,long}| + |w_{Q,short}| = 0$. That calculation is really an inflation-neutral portfolio (which is not technically market neutral). From a macro standpoint market-neutral strategies are much difficult to find since there isn't an obvious exposure to hedge out (like SPX beta in equities, or duration in bonds). In theory hedging out the Bloomberg Commodities beta could work. It should be noted that applying this hedge affects the exponential weighting of the strategy.  
 
+## Todo
+1. Get more daily time series inflation
+2. Get more monthly time series inflation (CPI & supply chain inflation)
+
 There are two current versions of the factor model
 1. Daily Quartiling & Daily Rebalance - this means that the quartiling / ranking is done every day as well as the rabalance back to the expoential weightings.
 2. Monthly Quartiling & Daily Rebalance - this means that the securities are picked (via quartiling) monthly but the exponential weightings are rebalanced daily.
