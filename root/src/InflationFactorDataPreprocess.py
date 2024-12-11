@@ -268,7 +268,82 @@ class DataPrepocess(InflationDataManager):
             
         return df_out
     
+    def _get_fitted_values(self, df: pd.DataFrame, n_comps) -> pd.DataFrame: 
         
+        df_out = (pd.DataFrame(
+            data = PCA(n_components = n_comps).fit_transform(df.dropna()),
+            index = df.dropna().index.to_list(),
+            columns = ["PC{}".format(i + 1) for i in range(n_comps)]))
+        
+        return df_out
+        
+    def get_pc_spread(self, n_comps: int = 3) -> pd.DataFrame: 
+        
+        df_breakeven = (self.get_breakeven().drop(
+            columns = ["Description"]).
+            assign(security = lambda x: x.security.str.split(" ").str[0]).
+            pivot(index = "date", columns = "security", values = "value"))
+        
+        df_swap = (self.get_inflation_swap().drop(
+            columns = ["Description"]).
+            assign(security = lambda x: x.security.str.split(" ").str[0]).
+            pivot(index = "date", columns = "security", values = "value"))
+        
+        df_breakeven_pc = (self._get_fitted_values(
+            df_breakeven, n_comps).
+            reset_index().
+            melt(id_vars = "index").
+            rename(columns = {
+                "index": "date",
+                "value": "breakeven_val"}))
+        
+        df_swap_pc = (self._get_fitted_values(
+            df_swap, n_comps).
+            reset_index().
+            melt(id_vars = "index").
+            rename(columns = {
+                "index": "date",
+                "value": "swap_val"}))
+        
+        df_out = (df_breakeven_pc.merge(
+            right = df_swap_pc, how = "inner", on = ["date", "variable"]).
+            assign(spread = lambda x: x.breakeven_val - x.swap_val))
+        
+        return df_out
+        
+    def get_pc_spread_ols(self, window: int = 30, verbose: bool = False) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.ols_path, "PCSpread.parquet")
+        try:
+            
+            if verbose == True: print("Looking for PC Spread OLS data")
+            df_out = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+            
+        except: 
+            
+            if verbose == True: print("Couldn't find data, collecting it")
+            
+            df_commod = (self.get_commodity_futures().drop(
+                columns = ["PX_LAST"]))
+        
+            df_prep = (self.get_pc_spread().drop(
+                columns = ["breakeven_val", "swap_val"]))
+            
+            df_combined = (df_commod.merge(
+                right = df_prep, how = "inner", on = ["date"]))
+            
+            df_out = (df_combined.assign(
+                group_var = lambda x: x.security + "_" + x.variable).
+                rename(columns = {"spread": "value"}).
+                groupby("group_var").
+                apply(self._run_regression, window, True).
+                reset_index(drop = True))
+            
+            if verbose == True: print("Saving data\n")
+            df_out.to_parquet(path = file_path, engine = "pyarrow")
+            
+        return df_out
 
 def main():
 
@@ -278,5 +353,6 @@ def main():
     DataPrepocess().prep_inflation_data(verbose = True)
     DataPrepocess().prep_five_forward_inflation(verbose = True)
     DataPrepocess().get_five_forward_rolling_ols(verbose = True)
+    DataPrepocess().get_pc_spread_ols(verbose = True)
     
-if __name__ == "__main__": main()
+#if __name__ == "__main__": main()

@@ -382,6 +382,80 @@ class FactorModel(DataPrepocess):
         Start by getting the equal risk optimization everyday
         '''
         print(self.generate_forward_inflation_factor())
+        
+    def generate_pc_spread_factor(self, verbose: bool = False) -> pd.DataFrame: 
+        
+        file_path = os.path.join(self.factor_path, "PCSpreadInflationSecRtn.parquet")
+        try:
+            
+            if verbose == True: print("Looking for PC Spread Commodity Inflation")
+            df_weighting = pd.read_parquet(path = file_path, engine = "pyarrow")
+            if verbose == True: print("Found data\n")
+            
+        except: 
+            
+            if verbose == True: print("Couldn't find data, getting it now")
+        
+            df_prep = (self.get_pc_spread_ols().drop(
+                columns = ["group_var"]).
+                rename(columns = {"variable": "group_var"}))
+            
+            dates = (df_prep[
+                ["date", "group_var"]].
+                groupby("date").
+                agg("count").
+                query("group_var > 10").
+                index.
+                to_list())
+            
+            df_decile = (df_prep.query(
+                "date == @dates").
+                groupby(["group_var", "date"]).
+                apply(self._get_decile, self.deciles).
+                reset_index(drop = True).
+                assign(tmp_var = lambda x: x.security + " " + x.group_var).
+                groupby("tmp_var").
+                apply(self._shift_decile).
+                reset_index(drop = True).
+                drop(columns = ["tmp_var", "decile"]).
+                query("lag_decile == @self.keep_deciles"))
+            
+            df_weighting = (df_decile.groupby([
+                "date", "group_var"]).
+                apply(self._get_weighting).
+                reset_index(drop = True).
+                assign(factor_rtn = lambda x: x.weight * x.PX_rtn))
+            
+            if verbose == True: print("Saving data\n")
+            df_weighting.to_parquet(path = file_path, engine = "pyarrow")
+        
+        return df_weighting
+    
+    def generate_pc_spread_monthly_factor(self, df: pd.DataFrame) -> pd.DataFrame: 
+        
+        df_month_end = (self.generate_pc_spread_factor().assign(
+            cur_month = lambda x: pd.to_datetime(x.date).dt.strftime("%Y-%m")).
+            groupby(["cur_month", "group_var"]).
+            apply(self._get_month_end).
+            reset_index(drop = True))
+        
+        df_month = (df_month_end[
+            ["cur_month"]].
+            drop_duplicates().
+            sort_values("cur_month").
+            assign(target_month = lambda x: x.cur_month.shift(-1)))
+        
+        df_weighting = (df_month_end[
+            ["security", "weight", "cur_month", "group_var", "lag_decile"]].
+            merge(right = df_month, how = "inner", on = ["cur_month"]).
+            dropna())
+        
+        df_monthly = (self.get_commodity_futures().assign(
+            target_month = lambda x: pd.to_datetime(x.date).dt.strftime("%Y-%m")).
+            merge(right = df_weighting, how = "inner", on = ["security", "target_month"]).
+            assign(factor_rtn = lambda x: x.weight * x.PX_rtn))
+        
+        return df_monthly
     
 def main():
     
@@ -395,4 +469,7 @@ def main():
     FactorModel().generate_forward_inflation_factor()
     FactorModel().generate_forward_inflation_monthly_factor()
     
-#if __name__ == "__main__": main()
+    FactorModel().generate_pc_spread_factor(verbose = True)
+    FactorModel().generate_pc_spread_factor()
+    
+if __name__ == "__main__": main()
