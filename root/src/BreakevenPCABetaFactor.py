@@ -45,7 +45,9 @@ class BreakevenPCABetaFactor(InflationDataManager):
             df_out = (pd.DataFrame(
                 data    = PCA(n_components = self.comps).fit_transform(df_wider),
                 index   = df_wider.index,
-                columns = ["PC{}".format(i + 1) for i in range(self.comps)]))
+                columns = ["PC{}".format(i + 1) for i in range(self.comps)]).
+                diff().
+                dropna())
             
             if verbose == True: print("Saving data\n")
             df_out.to_parquet(path = file_path, engine = "pyarrow")
