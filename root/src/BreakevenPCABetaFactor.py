@@ -46,7 +46,6 @@ class BreakevenPCABetaFactor(InflationDataManager):
                 data    = PCA(n_components = self.comps).fit_transform(df_wider),
                 index   = df_wider.index,
                 columns = ["PC{}".format(i + 1) for i in range(self.comps)]).
-                diff().
                 dropna())
             
             if verbose == True: print("Saving data\n")

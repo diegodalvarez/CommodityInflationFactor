@@ -293,5 +293,6 @@ def main() -> None:
     InflationDataManager().get_misc_indices(verbose = True)
     InflationDataManager().get_five_year_forward_inflation(verbose = True)
     
-if __name__ == "__main__": main()
+#if __name__ == "__main__": main()
 
+df = InflationDataManager().get_five_year_forward_inflation()
