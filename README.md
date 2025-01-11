@@ -60,9 +60,10 @@ The sharpes of each spread
 ![image](https://github.com/user-attachments/assets/1993ad54-1d96-4405-b2e8-4b63527a5185)
 
 ## Todo
-1. Fix T-Stats
-3. Underlying drivers
-3. Constant Monthly Weight Rebalance
+1. ```pd.ffill```
+2. PC Spread
+3. Change in PC
+4. PC of change in yield
 
 ## Appendices
 Collection of Futures Contracts
