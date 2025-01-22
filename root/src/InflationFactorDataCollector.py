@@ -13,9 +13,12 @@ class InflationDataManager:
     
     def __init__(self) -> None:
         
+        self.script_path    = os.path.dirname(os.path.abspath(__file__))
+
+        
         self.root_path      = os.path.abspath(
             os.path.join((os.path.abspath(
-                os.path.join(os.getcwd(), os.pardir))), os.pardir))
+                os.path.join(self.script_path, os.pardir))), os.pardir))
         
         self.data_path      = os.path.join(self.root_path, "data")
         self.raw_data_path  = os.path.join(self.data_path, "RawData")
@@ -293,6 +296,4 @@ def main() -> None:
     InflationDataManager().get_misc_indices(verbose = True)
     InflationDataManager().get_five_year_forward_inflation(verbose = True)
     
-#if __name__ == "__main__": main()
-
-df = InflationDataManager().get_five_year_forward_inflation()
+if __name__ == "__main__": main()

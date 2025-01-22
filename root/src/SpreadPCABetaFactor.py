@@ -8,13 +8,15 @@ Created on Fri Dec 13 23:43:53 2024
 import os
 import numpy as np
 import pandas as pd
+from   tqdm import tqdm
 from   sklearn.decomposition import PCA
+from   BreakevenPCABetaFactor import BreakevenPCABetaFactor
+from   InflationSwapPCABetaFactor import InflationSwapPCABetaFactor
 
 import statsmodels.api as sm
 from   statsmodels.regression.rolling import RollingOLS
 
-from BreakevenPCABetaFactor import BreakevenPCABetaFactor
-from InflationSwapPCABetaFactor import InflationSwapPCABetaFactor
+tqdm.pandas()
 
 class SpreadPCABetaFactor(BreakevenPCABetaFactor, InflationSwapPCABetaFactor):
     
@@ -55,8 +57,6 @@ class SpreadPCABetaFactor(BreakevenPCABetaFactor, InflationSwapPCABetaFactor):
         return df_out
     
     def _get_ols(self, df: pd.DataFrame, window: int, verbose: bool = False) -> pd.DataFrame: 
-        
-        if verbose == True: print("Working on {}".format(df.name))
         
         df_tmp = df.sort_values("date")
         model  = (RollingOLS(
@@ -100,7 +100,7 @@ class SpreadPCABetaFactor(BreakevenPCABetaFactor, InflationSwapPCABetaFactor):
                 drop(columns = ["PX_LAST"]).
                 assign(group_var = lambda x: x.pc + " " + x.security).
                 groupby("group_var").
-                apply(self._get_ols, window, verbose).
+                progress_apply(lambda group: self._get_ols(group, window, verbose)).
                 reset_index(drop = True))
 
             if verbose == True: print("Saving data\n")

@@ -6,14 +6,15 @@ Created on Fri Dec 13 23:17:43 2024
 """
 
 import os
-import numpy as np
 import pandas as pd
+from   tqdm import tqdm
 from   sklearn.decomposition import PCA
+from   InflationFactorDataCollector import InflationDataManager
 
 import statsmodels.api as sm
 from   statsmodels.regression.rolling import RollingOLS
 
-from InflationFactorDataCollector import InflationDataManager
+tqdm.pandas()
 
 class InflationSwapPCABetaFactor(InflationDataManager):
     
@@ -55,8 +56,6 @@ class InflationSwapPCABetaFactor(InflationDataManager):
     
     def _get_ols(self, df: pd.DataFrame, window: int, verbose: bool = False) -> pd.DataFrame: 
         
-        if verbose == True: print("Working on {}".format(df.name))
-        
         df_tmp = df.sort_values("date")
         model  = (RollingOLS(
             endog  = df_tmp.PX_rtn,
@@ -94,7 +93,7 @@ class InflationSwapPCABetaFactor(InflationDataManager):
                 drop(columns = ["PX_LAST"]).
                 assign(group_var = lambda x: x.pc + " " + x.security).
                 groupby("group_var").
-                apply(self._get_ols, window, verbose).
+                progress_apply(lambda group: self._get_ols(group, window, verbose)).
                 reset_index(drop = True))
             
             if verbose == True: print("Saving data\n")

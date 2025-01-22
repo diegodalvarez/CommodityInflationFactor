@@ -9,11 +9,13 @@ import os
 import numpy as np
 import pandas as pd
 from   sklearn.decomposition import PCA
+from   tqdm import tqdm
+from   InflationFactorDataCollector import InflationDataManager
 
 import statsmodels.api as sm
 from   statsmodels.regression.rolling import RollingOLS
 
-from InflationFactorDataCollector import InflationDataManager
+tqdm.pandas()
 
 class ForwardInflationPCA(InflationDataManager):
     
@@ -53,7 +55,6 @@ class ForwardInflationPCA(InflationDataManager):
     
     def _get_ols(self, df: pd.DataFrame, window: int, verbose: bool) -> pd.DataFrame: 
         
-        if verbose == True: print("Working on", df.name)
         df_out = (RollingOLS(
             endog  = df.PX_rtn,
             exog   = sm.add_constant(df.fitted_value),
@@ -93,7 +94,7 @@ class ForwardInflationPCA(InflationDataManager):
                 drop(columns = ["PX_LAST"]).
                 assign(group_var = lambda x: x.variable + "_" + x.security).
                 groupby("group_var").
-                apply(self._get_ols, window, verbose).
+                progress_apply(lambda group: self._get_ols(group, window, verbose)).
                 reset_index(drop = True))
             
             if verbose == True: print("Saving data\n")
